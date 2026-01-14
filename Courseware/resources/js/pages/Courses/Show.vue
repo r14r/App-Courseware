@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
 type TopicEntry = {
     file: string;
@@ -52,6 +52,7 @@ const chapterTitle = ref('');
 const topicCache = ref<Record<string, TopicContent | Quiz>>({});
 const quizAvailable = ref(false);
 const quizTitle = ref('Quiz');
+const showOnlyTopic = ref(false);
 const isLoading = ref(true);
 
 const currentChapter = computed(() => chapters.value[selectedChapterIndex.value]);
@@ -178,6 +179,7 @@ async function loadChapter(index: number): Promise<void> {
     if (topicsIndex && Array.isArray(topicsIndex) && topicsIndex.length) {
         topics.value = normalizeTopics(topicsIndex);
         selectedTopicIndex.value = 0;
+        showOnlyTopic.value = false;
         await loadTopic(selectedTopicIndex.value);
     } else {
         topics.value = [];
@@ -188,6 +190,7 @@ async function loadChapter(index: number): Promise<void> {
         }
         chapterContentHtml.value = renderContent(content);
         chapterTitle.value = chapter.title || '';
+        showOnlyTopic.value = false;
         await nextTick();
     }
 
@@ -221,6 +224,7 @@ async function loadTopic(index: number): Promise<void> {
         const cached = topicCache.value[filename] as TopicContent;
         chapterContentHtml.value = renderContent(cached);
         chapterTitle.value = cached.title || topicEntry.title || chapter.title || '';
+        showOnlyTopic.value = true;
         await nextTick();
         return;
     }
@@ -234,6 +238,7 @@ async function loadTopic(index: number): Promise<void> {
         topicCache.value[filename] = data;
         chapterContentHtml.value = renderContent(data);
         chapterTitle.value = data.title || topicEntry.title || chapter.title || '';
+        showOnlyTopic.value = true;
         await nextTick();
         return;
     }
@@ -273,7 +278,30 @@ function goToQuiz(): void {
     router.visit(quizLink.value);
 }
 
+function setBodyClass(isActive: boolean): void {
+    const className = 'courseware-body';
+    if (isActive) {
+        document.body.classList.add(className);
+    } else {
+        document.body.classList.remove(className);
+    }
+}
+
+function ensureBootstrapScript(): void {
+    const scriptId = 'bootstrap-bundle-cdn';
+    if (document.getElementById(scriptId)) {
+        return;
+    }
+    const script = document.createElement('script');
+    script.id = scriptId;
+    script.src = 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js';
+    script.defer = true;
+    document.body.appendChild(script);
+}
+
 onMounted(async () => {
+    setBodyClass(true);
+    ensureBootstrapScript();
     isLoading.value = true;
     await loadCourse();
     if (chapters.value.length) {
@@ -281,120 +309,134 @@ onMounted(async () => {
     }
     isLoading.value = false;
 });
+
+onBeforeUnmount(() => {
+    setBodyClass(false);
+});
 </script>
 
 <template>
-    <Head :title="course?.title || 'Course'" />
+    <Head :title="course?.title || 'Course'">
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        />
+        <link rel="stylesheet" href="/courseware.css" />
+    </Head>
 
-    <div class="min-h-screen bg-slate-950 text-slate-100">
-        <header class="border-b border-white/10 bg-slate-950/90 backdrop-blur">
-            <div class="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-4 px-6 py-6">
-                <Link href="/" class="text-xs uppercase tracking-[0.35em] text-slate-400">All Courses</Link>
-                <div class="flex flex-1 flex-wrap items-center gap-4">
+    <div>
+        <header class="bg-light border-bottom">
+            <div class="container py-3 d-flex align-items-center gap-3 flex-wrap">
+                <Link href="/" class="small text-muted">&larr; All courses</Link>
+                <div class="d-flex align-items-center gap-3 flex-wrap">
                     <img
-                        class="h-20 w-20 rounded-2xl border border-white/10 object-cover"
+                        class="rounded border"
                         :src="`/assets/${props.slug}.png`"
                         :alt="course?.title || 'Course'"
+                        style="max-height: 100px; width: auto"
                     />
                     <div>
-                        <h1 class="text-xl font-semibold tracking-tight text-white">
-                            {{ course?.title || 'Course' }}
-                        </h1>
-                        <p class="text-sm text-slate-400">
-                            {{ course?.description }}
-                        </p>
+                        <h1 class="h5 mb-0">{{ course?.title || 'Course' }}</h1>
+                        <p class="small text-muted mb-0">{{ course?.description }}</p>
                     </div>
                 </div>
             </div>
         </header>
 
-        <main class="mx-auto w-full max-w-6xl px-6 py-10">
-            <div class="grid gap-8 lg:grid-cols-[280px_1fr]">
-                <aside class="space-y-4">
-                    <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-5">
-                        <h2 class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">Chapters</h2>
-                        <div class="mt-4 space-y-3">
-                            <details
-                                v-for="(chapter, index) in chapters"
-                                :key="chapter.id"
-                                class="group rounded-2xl border border-white/5 bg-slate-950/60 p-4"
-                                :open="index === selectedChapterIndex"
-                            >
-                                <summary
-                                    class="cursor-pointer list-none text-sm font-medium text-slate-200"
-                                    @click="loadChapter(index)"
-                                >
-                                    {{ index + 1 }}. {{ chapter.title }}
-                                </summary>
-                                <ul v-if="chapter.topics?.length" class="mt-3 space-y-2 text-sm">
-                                    <li v-for="(topic, tIndex) in chapter.topics" :key="topic.file">
+        <main class="container py-4">
+            <div class="row">
+                <aside class="col-md-3 mb-3">
+                    <div class="card sticky-top" style="top: 1rem">
+                        <div class="card-body">
+                            <h2 class="h6">Chapters</h2>
+                            <div class="accordion" id="chaptersAccordion">
+                                <div v-for="(chapter, index) in chapters" :key="chapter.id" class="accordion-item">
+                                    <h2 class="accordion-header" :id="`heading-${index}`">
                                         <button
+                                            class="accordion-button collapsed"
                                             type="button"
-                                            class="w-full rounded-full px-3 py-1 text-left transition"
-                                            :class="
-                                                selectedChapterIndex === index && selectedTopicIndex === tIndex
-                                                    ? 'bg-white/10 text-white'
-                                                    : 'text-slate-400 hover:text-white'
-                                            "
-                                            @click="loadChapter(index).then(() => loadTopic(tIndex))"
+                                            data-bs-toggle="collapse"
+                                            :data-bs-target="`#collapse-${index}`"
+                                            aria-expanded="false"
+                                            :aria-controls="`collapse-${index}`"
+                                            @click="loadChapter(index)"
                                         >
-                                            {{ topic.title }}
+                                            <span>{{ index + 1 }}. {{ chapter.title }}</span>
                                         </button>
-                                    </li>
-                                </ul>
-                            </details>
+                                    </h2>
+                                    <div
+                                        :id="`collapse-${index}`"
+                                        class="accordion-collapse collapse"
+                                        :aria-labelledby="`heading-${index}`"
+                                        data-bs-parent="#chaptersAccordion"
+                                    >
+                                        <div class="accordion-body p-2">
+                                            <ul v-if="chapter.topics && chapter.topics.length" class="list-group list-group-flush">
+                                                <li
+                                                    v-for="(topic, topicIndex) in chapter.topics"
+                                                    :key="topic.file || topic.title"
+                                                    class="list-group-item py-1"
+                                                >
+                                                    <a
+                                                        href="#"
+                                                        class="text-decoration-none"
+                                                        :class="
+                                                            selectedChapterIndex === index && selectedTopicIndex === topicIndex
+                                                                ? 'link-primary fw-semibold'
+                                                                : 'link-dark'
+                                                        "
+                                                        :aria-current="
+                                                            selectedChapterIndex === index && selectedTopicIndex === topicIndex
+                                                                ? 'true'
+                                                                : 'false'
+                                                        "
+                                                        @click.prevent="loadChapter(index).then(() => loadTopic(topicIndex))"
+                                                    >
+                                                        {{ topic.title }}
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </aside>
 
-                <section class="space-y-6">
-                    <div class="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 p-6">
-                        <div class="flex flex-wrap items-center justify-between gap-4">
-                            <div>
-                                <p class="text-xs uppercase tracking-[0.35em] text-slate-500">Lesson</p>
-                                <h2 class="mt-2 text-2xl font-semibold text-white">
-                                    {{ chapterTitle || currentChapter?.title || '' }}
-                                </h2>
-                            </div>
-                            <div class="text-xs uppercase tracking-[0.3em] text-slate-400">
-                                {{ currentChapter?.id || 'Chapter' }}
-                            </div>
+                <section class="col-md-9">
+                    <div class="card">
+                        <div class="card-body">
+                            <h1 class="h1">{{ chapterTitle || currentChapter?.title || '' }}</h1>
                         </div>
                     </div>
+                    <div class="mt-3"></div>
 
-                    <div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-                        <div v-if="isLoading" class="space-y-3">
-                            <div class="h-5 w-2/3 animate-pulse rounded-full bg-white/10"></div>
-                            <div class="h-4 w-full animate-pulse rounded-full bg-white/5"></div>
-                            <div class="h-4 w-5/6 animate-pulse rounded-full bg-white/5"></div>
-                        </div>
-                        <article v-else class="course-content space-y-4" v-html="chapterContentHtml"></article>
+                    <div class="card">
+                        <div class="card-body">
+                            <article>
+                                <div v-show="showOnlyTopic">
+                                    <div class="d-flex justify-content-between align-items-start mb-2"></div>
+                                    <div v-html="chapterContentHtml" class="mb-3"></div>
+                                </div>
+                                <div v-show="!showOnlyTopic">
+                                    <div v-html="chapterContentHtml" class="mb-3"></div>
+                                </div>
+                            </article>
 
-                        <div class="mt-6 flex flex-wrap items-center justify-between gap-4">
-                            <div class="flex gap-2">
-                                <button
-                                    type="button"
-                                    class="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.3em] text-white/80 hover:text-white"
-                                    @click="prevChapter"
-                                >
-                                    Prev
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.3em] text-white/80 hover:text-white"
-                                    @click="nextChapter"
-                                >
-                                    Next
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <button class="btn btn-outline-secondary btn-sm me-2" @click="prevChapter">
+                                        &larr; Prev
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm" @click="nextChapter">
+                                        Next &rarr;
+                                    </button>
+                                </div>
+                                <button v-if="quizAvailable" class="btn btn-primary btn-sm" @click="goToQuiz">
+                                    {{ quizTitle }}
                                 </button>
                             </div>
-                            <button
-                                v-if="quizAvailable"
-                                type="button"
-                                class="rounded-full bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900"
-                                @click="goToQuiz"
-                            >
-                                {{ quizTitle }}
-                            </button>
                         </div>
                     </div>
                 </section>
@@ -402,28 +444,3 @@ onMounted(async () => {
         </main>
     </div>
 </template>
-
-<style scoped>
-.course-content :deep(p) {
-    color: rgba(248, 250, 252, 0.85);
-    line-height: 1.7;
-}
-
-.course-content :deep(h2),
-.course-content :deep(h3) {
-    color: #ffffff;
-    margin-top: 1.5rem;
-}
-
-.course-content :deep(pre) {
-    background: rgba(15, 23, 42, 0.8);
-    border-radius: 16px;
-    padding: 1rem;
-    overflow-x: auto;
-    border: 1px solid rgba(148, 163, 184, 0.2);
-}
-
-.course-content :deep(code) {
-    color: #fbbf24;
-}
-</style>

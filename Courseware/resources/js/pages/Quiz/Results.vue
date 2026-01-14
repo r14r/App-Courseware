@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 type QuizResult = {
     id: string;
@@ -30,12 +30,16 @@ const quizLink = computed(
     () => `/courses/${encodeURIComponent(props.slug)}/chapters/${encodeURIComponent(props.chapter)}/quiz`,
 );
 
-const progressPercent = computed(() => {
+function progressPercent(): number {
     if (!payload.value?.total) {
         return 0;
     }
     return Math.round((payload.value.score / payload.value.total) * 100);
-});
+}
+
+function progressStyle(): string {
+    return `width: ${progressPercent()}%`;
+}
 
 function isPerfect(): boolean {
     return Boolean(payload.value && payload.value.score === payload.value.total);
@@ -53,7 +57,17 @@ function correctLabel(result: QuizResult): string {
     return result.options?.[result.correctIndex] || '—';
 }
 
+function setBodyClass(isActive: boolean): void {
+    const className = 'courseware-body';
+    if (isActive) {
+        document.body.classList.add(className);
+    } else {
+        document.body.classList.remove(className);
+    }
+}
+
 onMounted(() => {
+    setBodyClass(true);
     const key = `quizResults:${props.slug}:${props.chapter}`;
     const stored = sessionStorage.getItem(key);
     if (!stored) {
@@ -66,126 +80,107 @@ onMounted(() => {
         payload.value = null;
     }
 });
+
+onBeforeUnmount(() => {
+    setBodyClass(false);
+});
 </script>
 
 <template>
-    <Head :title="title" />
+    <Head :title="title">
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        />
+        <link rel="stylesheet" href="/courseware.css" />
+    </Head>
 
-    <div class="min-h-screen bg-slate-950 text-slate-100">
-        <header class="border-b border-white/10 bg-slate-950/90 backdrop-blur">
-            <div class="mx-auto flex w-full max-w-4xl flex-wrap items-center justify-between gap-4 px-6 py-5">
-                <div>
-                    <p class="text-xs uppercase tracking-[0.35em] text-slate-500">Results</p>
-                    <h1 class="mt-2 text-2xl font-semibold text-white">{{ title }}</h1>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <Link
-                        :href="courseLink"
-                        class="rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.3em] text-white/70"
-                    >
-                        Back to course
-                    </Link>
-                    <Link
-                        :href="quizLink"
-                        class="rounded-full bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900"
-                    >
-                        Retake quiz
-                    </Link>
+    <div class="bg-light">
+        <header class="bg-white border-bottom">
+            <div class="container py-3 d-flex align-items-center justify-content-between">
+                <h1 class="h5 mb-0">{{ title }}</h1>
+                <div class="d-flex gap-2">
+                    <Link class="btn btn-outline-secondary btn-sm" :href="courseLink">Back to course</Link>
+                    <Link class="btn btn-primary btn-sm" :href="quizLink">Back to quiz</Link>
                 </div>
             </div>
         </header>
 
-        <main class="mx-auto w-full max-w-4xl px-6 py-10">
-            <div v-if="!payload" class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-                <p class="text-sm text-slate-300">No quiz results found.</p>
-                <Link
-                    :href="quizLink"
-                    class="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900"
-                >
-                    Go to quiz
-                </Link>
+        <main class="container py-4">
+            <div v-if="!payload" class="card">
+                <div class="card-body">
+                    <p class="mb-2">No quiz results found.</p>
+                    <Link class="btn btn-primary btn-sm" :href="quizLink">Go to quiz</Link>
+                </div>
             </div>
 
-            <div v-else class="space-y-6">
-                <div class="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-                    <div v-if="isPerfect()" class="confetti" aria-hidden="true"></div>
-                    <div class="flex flex-wrap items-center justify-between gap-4">
-                        <div>
-                            <p class="text-xs uppercase tracking-[0.35em] text-slate-500">Score</p>
-                            <div class="mt-2 text-3xl font-semibold text-white">
-                                {{ payload.score }} / {{ payload.total }}
-                            </div>
+            <div v-else class="card position-relative overflow-hidden">
+                <div v-if="isPerfect()" class="balloon-burst" aria-hidden="true">
+                    <span class="balloon balloon--one"></span>
+                    <span class="balloon balloon--two"></span>
+                    <span class="balloon balloon--three"></span>
+                    <span class="balloon balloon--four"></span>
+                    <span class="balloon balloon--five"></span>
+                </div>
+                <div class="card-body">
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <div class="fw-semibold">Score</div>
+                            <div><strong>{{ payload.score }}</strong> / {{ payload.total }}</div>
                         </div>
-                        <div class="w-full max-w-xs">
-                            <div class="h-3 w-full rounded-full bg-white/10">
-                                <div
-                                    class="h-3 rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-rose-400"
-                                    :style="{ width: `${progressPercent}%` }"
-                                ></div>
+                        <div class="progress" role="progressbar" :aria-valuenow="payload.score" :aria-valuemax="payload.total">
+                            <div class="progress-bar" :style="progressStyle()">
+                                {{ progressPercent() }}%
                             </div>
-                            <p class="mt-2 text-xs uppercase tracking-[0.3em] text-slate-400">
-                                {{ progressPercent }}% complete
-                            </p>
                         </div>
                     </div>
-                </div>
 
-                <div class="space-y-4">
-                    <article
-                        v-for="(result, index) in payload.results"
-                        :key="result.id"
-                        class="rounded-3xl border border-white/10 bg-slate-900/70 p-5"
-                    >
-                        <div class="flex items-start justify-between gap-4">
-                            <div>
-                                <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Question {{ index + 1 }}</p>
-                                <h2 class="mt-2 text-base font-semibold text-white">
-                                    {{ result.question }}
-                                </h2>
+                    <div v-for="(result, resultIndex) in payload.results" :key="result.id" class="card mb-3">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center gap-2">
+                                <svg
+                                    v-if="isCorrect(result)"
+                                    class="text-success"
+                                    width="20"
+                                    height="20"
+                                    viewBox="0 0 16 16"
+                                    fill="currentColor"
+                                    aria-hidden="true"
+                                >
+                                    <path
+                                        d="M13.485 1.929a1 1 0 0 1 .086 1.414l-7 8a1 1 0 0 1-1.497.036L2.43 8.733a1 1 0 1 1 1.414-1.414l1.77 1.77 6.293-7.19a1 1 0 0 1 1.414-.086z"
+                                    />
+                                </svg>
+                                <svg
+                                    v-else
+                                    class="text-danger"
+                                    width="20"
+                                    height="20"
+                                    viewBox="0 0 16 16"
+                                    fill="currentColor"
+                                    aria-hidden="true"
+                                >
+                                    <path
+                                        d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"
+                                    />
+                                </svg>
+                                <div class="fw-medium">{{ resultIndex + 1 }}. {{ result.question }}</div>
                             </div>
-                            <span
-                                class="rounded-full px-3 py-1 text-xs uppercase tracking-[0.3em]"
-                                :class="isCorrect(result) ? 'bg-emerald-400/20 text-emerald-200' : 'bg-rose-400/20 text-rose-200'"
-                            >
-                                {{ isCorrect(result) ? 'Correct' : 'Incorrect' }}
-                            </span>
+                            <div class="mt-2">
+                                <div>
+                                    Selected: <span class="fw-semibold">{{ selectedLabel(result) }}</span>
+                                </div>
+                                <div>
+                                    Correct: <span class="fw-semibold text-success">{{ correctLabel(result) }}</span>
+                                </div>
+                                <div v-if="result.explanation" class="mt-2 text-muted">
+                                    {{ result.explanation }}
+                                </div>
+                            </div>
                         </div>
-                        <div class="mt-4 text-sm text-slate-300">
-                            <p>
-                                Selected: <span class="font-semibold text-white">{{ selectedLabel(result) }}</span>
-                            </p>
-                            <p>
-                                Correct: <span class="font-semibold text-emerald-200">{{ correctLabel(result) }}</span>
-                            </p>
-                            <p v-if="result.explanation" class="mt-2 text-slate-400">
-                                {{ result.explanation }}
-                            </p>
-                        </div>
-                    </article>
+                    </div>
                 </div>
             </div>
         </main>
     </div>
 </template>
-
-<style scoped>
-.confetti {
-    position: absolute;
-    inset: 0;
-    background-image:
-        radial-gradient(circle at 20% 20%, rgba(251, 191, 36, 0.4), transparent 35%),
-        radial-gradient(circle at 80% 30%, rgba(244, 114, 182, 0.4), transparent 40%),
-        radial-gradient(circle at 50% 70%, rgba(56, 189, 248, 0.35), transparent 45%);
-    animation: float 3s ease-in-out infinite alternate;
-    pointer-events: none;
-}
-
-@keyframes float {
-    from {
-        transform: translateY(0);
-    }
-    to {
-        transform: translateY(-6px);
-    }
-}
-</style>

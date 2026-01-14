@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 
 type QuizQuestion = {
     id: string;
@@ -37,14 +37,21 @@ type RawQuiz = {
 const props = defineProps<{ slug: string; chapter: string }>();
 
 const quiz = ref<Quiz | null>(null);
-const title = computed(() => quiz.value?.title || 'Quiz');
 const answers = reactive<Record<string, number>>({});
+const currentIndex = ref(0);
 
+const title = computed(() => quiz.value?.title || 'Quiz');
 const courseLink = computed(() => `/courses/${encodeURIComponent(props.slug)}`);
 const resultsLink = computed(
     () =>
         `/courses/${encodeURIComponent(props.slug)}/chapters/${encodeURIComponent(props.chapter)}/results`,
 );
+const currentQuestion = computed(() => {
+    if (!quiz.value) {
+        return null;
+    }
+    return quiz.value.questions[currentIndex.value] || null;
+});
 
 async function fetchJson<T>(path: string): Promise<T | null> {
     try {
@@ -92,6 +99,39 @@ function normalizeQuiz(raw: RawQuiz | null): Quiz | null {
     return null;
 }
 
+function progressPercent(): number {
+    if (!quiz.value || !quiz.value.questions.length) {
+        return 0;
+    }
+    return Math.round(((currentIndex.value + 1) / quiz.value.questions.length) * 100);
+}
+
+function nextLabel(): string {
+    if (!quiz.value) {
+        return 'Next';
+    }
+    return currentIndex.value === quiz.value.questions.length - 1 ? 'Submit Quiz' : 'Next';
+}
+
+function handleNext(): void {
+    if (!quiz.value) {
+        return;
+    }
+    const question = currentQuestion.value;
+    if (!question) {
+        return;
+    }
+    if (answers[question.id] === undefined) {
+        window.alert('Please answer the question');
+        return;
+    }
+    if (currentIndex.value < quiz.value.questions.length - 1) {
+        currentIndex.value += 1;
+        return;
+    }
+    submitQuiz();
+}
+
 function submitQuiz(): void {
     if (!quiz.value) {
         return;
@@ -133,74 +173,90 @@ function submitQuiz(): void {
     router.visit(resultsLink.value);
 }
 
+function setBodyClass(isActive: boolean): void {
+    const className = 'courseware-body';
+    if (isActive) {
+        document.body.classList.add(className);
+    } else {
+        document.body.classList.remove(className);
+    }
+}
+
 onMounted(async () => {
+    setBodyClass(true);
     let payload = await fetchJson<RawQuiz>(`/data/courses/${props.slug}/${props.chapter}/quiz.json`);
     if (!payload) {
         payload = await fetchJson<RawQuiz>(`/data/courses/${props.slug}/chapters/${props.chapter}/quiz.json`);
     }
     quiz.value = normalizeQuiz(payload);
+    if (quiz.value) {
+        currentIndex.value = 0;
+    }
+});
+
+onBeforeUnmount(() => {
+    setBodyClass(false);
 });
 </script>
 
 <template>
-    <Head :title="title" />
+    <Head :title="title">
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        />
+        <link rel="stylesheet" href="/courseware.css" />
+    </Head>
 
-    <div class="min-h-screen bg-slate-100 text-slate-900">
-        <header class="border-b border-slate-200 bg-white">
-            <div class="mx-auto flex w-full max-w-4xl items-center justify-between px-6 py-5">
-                <div>
-                    <p class="text-xs uppercase tracking-[0.35em] text-slate-400">Quiz</p>
-                    <h1 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{{ title }}</h1>
+    <div class="bg-light">
+        <header class="bg-white border-bottom">
+            <div class="container py-3">
+                <h1 class="h5 mb-2">{{ title }}</h1>
+                <div v-if="quiz" class="progress" role="progressbar" :aria-valuenow="progressPercent()" aria-valuemin="0" aria-valuemax="100">
+                    <div class="progress-bar" :style="`width: ${progressPercent()}%`"></div>
                 </div>
-                <Link :href="courseLink" class="text-xs uppercase tracking-[0.35em] text-slate-500">
-                    Back to course
-                </Link>
             </div>
         </header>
 
-        <main class="mx-auto w-full max-w-4xl px-6 py-10">
-            <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div v-if="!quiz" class="text-sm text-slate-500">Loading quiz...</div>
+        <main class="container py-4">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h6 mb-2">{{ title }}</h2>
+                    <div v-show="!quiz">
+                        <p class="text-muted">Loading quiz...</p>
+                    </div>
 
-                <div v-else>
-                    <form class="space-y-6">
-                        <fieldset v-for="(question, qIndex) in quiz.questions" :key="question.id" class="space-y-3">
-                            <legend class="text-base font-semibold text-slate-900">
-                                {{ qIndex + 1 }}. {{ question.question }}
-                            </legend>
-                            <div class="space-y-2">
-                                <label
-                                    v-for="(option, optionIndex) in question.options"
-                                    :key="optionIndex"
-                                    class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-600 transition hover:border-slate-300"
-                                >
-                                    <input
-                                        class="mt-1"
-                                        type="radio"
-                                        :name="question.id"
-                                        :value="optionIndex"
-                                        v-model.number="answers[question.id]"
-                                    />
-                                    <span>{{ option }}</span>
-                                </label>
-                            </div>
-                        </fieldset>
-                    </form>
-
-                    <div class="mt-8 flex flex-wrap gap-3">
-                        <button
-                            type="button"
-                            class="rounded-full bg-slate-900 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white"
-                            @click="submitQuiz"
-                        >
-                            Submit quiz
-                        </button>
-                        <Link
-                            :href="courseLink"
-                            class="rounded-full border border-slate-300 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-600"
-                        >
-                            Back to course
-                        </Link>
+                    <div v-if="quiz">
+                        <div class="mb-3 text-muted small">
+                            Question {{ currentIndex + 1 }} of {{ quiz.questions.length }}
+                        </div>
+                        <form>
+                            <fieldset class="mb-3" v-show="currentQuestion">
+                                <legend class="fw-medium">{{ currentQuestion ? currentQuestion.question : '' }}</legend>
+                                <div>
+                                    <div
+                                        v-for="(option, optionIndex) in currentQuestion?.options || []"
+                                        :key="optionIndex"
+                                        class="form-check mb-2"
+                                    >
+                                        <input
+                                            class="form-check-input"
+                                            type="radio"
+                                            :name="currentQuestion?.id"
+                                            :value="optionIndex"
+                                            v-model.number="answers[currentQuestion?.id || '']"
+                                        />
+                                        <label class="form-check-label">{{ option }}</label>
+                                    </div>
+                                </div>
+                            </fieldset>
+                        </form>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary" type="button" @click="handleNext">
+                                {{ nextLabel() }}
+                            </button>
+                            <Link class="btn btn-outline-secondary" :href="courseLink">Back to course</Link>
+                        </div>
                     </div>
                 </div>
             </div>
