@@ -1,0 +1,46 @@
+[
+  {
+    "file": "001-what-is-python.json",
+    "title": "What Is Python"
+  },
+  {
+    "file": "002-installing-python.json",
+    "title": "Installing Python"
+  },
+  {
+    "file": "003-running-scripts.json",
+    "title": "Running Scripts"
+  },
+  {
+    "file": "004-indentation.json",
+    "title": "Indentation"
+  },
+  {
+    "file": "005-printing.json",
+    "title": "Printing"
+  },
+  {
+    "file": "006-variables-basics.json",
+    "title": "Variables Basics"
+  },
+  {
+    "file": "007-comments.json",
+    "title": "Comments"
+  },
+  {
+    "file": "008-virtual-environments.json",
+    "title": "Virtual Environments"
+  },
+  {
+    "file": "009-package-management.json",
+    "title": "Package Management"
+  },
+  {
+    "file": "010-next-steps.json",
+    "title": "Next Steps"
+  },
+  {
+    "file": "quiz.json",
+    "title": "Quiz"
+  }
+]

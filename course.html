@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Course – Courseware Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body x-data="demoCourseView" x-init="init()">
+    <header class="bg-light border-bottom">
+      <div class="container py-3 d-flex align-items-center gap-3 flex-wrap">
+        <a href="/" class="small text-muted">&larr; All courses</a>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+          <img class="rounded border" :src="`/assets/${slug}.png`" :alt="course?.title || 'Course'" style="max-height:100px; width:auto;">
+          <div>
+          <h1 class="h5 mb-0" x-text="course?.title || 'Course'"></h1>
+          <p class="small text-muted mb-0" x-text="course?.description"></p>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="container py-4">
+      <div class="row">
+        <!-- Sidebar -->
+        <aside class="col-md-3 mb-3">
+          <div class="card sticky-top" style="top:1rem;">
+            <div class="card-body">
+              <h2 class="h6">Chapters</h2>
+              <div class="accordion" id="chaptersAccordion">
+                <template x-for="(ch, idx) in chapters" :key="ch.id">
+                  <div class="accordion-item">
+                    <h2 class="accordion-header" :id="'heading'+idx">
+                      <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" :data-bs-target="'#collapse'+idx" aria-expanded="false" :aria-controls="'collapse'+idx" @click="loadChapter(idx)">
+                        <span x-text="(idx+1) + '. ' + ch.title"></span>
+                      </button>
+                    </h2>
+                    <div :id="'collapse'+idx" class="accordion-collapse collapse" :aria-labelledby="'heading'+idx" data-bs-parent="#chaptersAccordion">
+                      <div class="accordion-body p-2">
+                        <template x-if="ch.topics && ch.topics.length">
+                          <ul class="list-group list-group-flush">
+                            <template x-for="(t, tidx) in ch.topics" :key="t.file || t">
+                              <li class="list-group-item py-1">
+                                <a
+                                  href="#"
+                                  class="text-decoration-none"
+                                  :class="selectedChapterIndex === idx && selectedTopicIndex === tidx ? 'link-primary fw-semibold' : 'link-dark'"
+                                  :aria-current="selectedChapterIndex === idx && selectedTopicIndex === tidx ? 'true' : 'false'"
+                                  @click.prevent="loadChapter(idx).then(()=>loadTopic(tidx))"
+                                >
+                                  <span x-text="t.title || (t.file||t).replace(/^\\d+-|\\.json$/g,'').replace(/-/g,' ')"></span>
+                                </a>
+                              </li>
+                            </template>
+                          </ul>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Main content -->
+        <section class="col-md-9">
+          <div class="card">
+            <div class="card-body">
+              <h1 class="h1" x-text="chapterTitle || chapters[selectedChapterIndex]?.title || ''"></h1>
+              </div>
+          </div>
+          &nbsp;
+          
+          <div class="card">
+            <div class="card-body">
+              <!---
+              <div class="mb-4">
+                <h2 class="h5" x-text="course?.title"></h2>
+                <p class="text-muted" x-text="course?.description"></p>
+              </div>
+              -->
+
+              <article>
+
+                <div x-show="showOnlyTopic">
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                  </div>
+                  <div x-html="chapterContentHtml" class="mb-3"></div>
+                </div>
+                <div x-show="!showOnlyTopic">
+                  <div x-html="chapterContentHtml" class="mb-3"></div>
+                </div>
+              </article>
+
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                  <button class="btn btn-outline-secondary btn-sm me-2" @click="prevChapter()">&larr; Prev</button>
+                  <button class="btn btn-outline-secondary btn-sm" @click="nextChapter()">Next &rarr;</button>
+                </div>
+                <template x-if="quizAvailable">
+                  <button class="btn btn-primary btn-sm" @click="goToQuiz()" x-text="quizTitle"></button>
+                </template>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
