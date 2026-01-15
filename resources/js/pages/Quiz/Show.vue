@@ -52,6 +52,7 @@ const currentQuestion = computed(() => {
     }
     return quiz.value.questions[currentIndex.value] || null;
 });
+const currentQuestionId = computed(() => currentQuestion.value?.id ?? 'current-question');
 
 async function fetchJson<T>(path: string): Promise<T | null> {
     try {
@@ -76,22 +77,24 @@ function normalizeQuiz(raw: RawQuiz | null): Quiz | null {
     if (Array.isArray(raw.questions)) {
         return {
             title: raw.title || 'Quiz',
-            questions: raw.questions.map((question) => ({
+            questions: raw.questions.map((question, index) => ({
+                id: question.id ?? `question-${index + 1}`,
+                type: question.type || 'single',
                 ...question,
-                options: question.options || [],
-                correctIndex: question.correctIndex ?? 0,
+                options: question.options || question.choices || [],
+                correctIndex: question.correctIndex ?? question.answerIndex ?? question.answer ?? 0,
             })),
         };
     }
     if (raw.quiz && Array.isArray(raw.quiz.questions)) {
         return {
             title: raw.title || raw.quiz.title || 'Quiz',
-            questions: raw.quiz.questions.map((question) => ({
-                id: question.id,
+            questions: raw.quiz.questions.map((question, index) => ({
+                id: question.id ?? `question-${index + 1}`,
                 type: question.type || 'single',
                 question: question.question,
                 options: question.options || question.choices || [],
-                correctIndex: question.correctIndex ?? question.answerIndex ?? 0,
+                correctIndex: question.correctIndex ?? question.answerIndex ?? question.answer ?? 0,
                 explanation: question.explanation || '',
             })),
         };
@@ -231,9 +234,9 @@ onMounted(async () => {
                                     <input
                                         class="mt-1"
                                         type="radio"
-                                        :name="currentQuestion?.id"
+                                        :name="currentQuestionId"
                                         :value="optionIndex"
-                                        v-model.number="answers[currentQuestion?.id || '']"
+                                        v-model.number="answers[currentQuestionId]"
                                     />
                                     <span>{{ option }}</span>
                                 </label>

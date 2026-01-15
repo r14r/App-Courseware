@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
+
+import type { AppPageProps } from '@/types';
 
 type QuizResult = {
     id: string;
@@ -22,9 +24,11 @@ type QuizPayload = {
 
 const props = defineProps<{ slug: string; chapter: string }>();
 
+const page = usePage<AppPageProps>();
 const payload = ref<QuizPayload | null>(null);
 
 const title = computed(() => payload.value?.title || 'Quiz Results');
+const dashboardLink = computed(() => '/dashboard');
 const courseLink = computed(() => `/courses/${encodeURIComponent(props.slug)}`);
 const quizLink = computed(
     () => `/courses/${encodeURIComponent(props.slug)}/chapters/${encodeURIComponent(props.chapter)}/quiz`,
@@ -53,7 +57,32 @@ function correctLabel(result: QuizResult): string {
     return result.options?.[result.correctIndex] || '—';
 }
 
-onMounted(() => {
+async function storeResults(current: QuizPayload): Promise<void> {
+    if (!page.props.auth?.user) {
+        return;
+    }
+
+    const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+    if (!token) {
+        return;
+    }
+
+    await fetch('/progress/results', {
+        method: 'post',
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': token,
+        },
+        body: JSON.stringify({
+            slug: props.slug,
+            total_answers: current.total,
+            correct_answers: current.score,
+        }),
+    });
+}
+
+onMounted(async () => {
     const key = `quizResults:${props.slug}:${props.chapter}`;
     const stored = sessionStorage.getItem(key);
     if (!stored) {
@@ -62,6 +91,9 @@ onMounted(() => {
     }
     try {
         payload.value = JSON.parse(stored) as QuizPayload;
+        if (payload.value) {
+            await storeResults(payload.value);
+        }
     } catch {
         payload.value = null;
     }
@@ -79,6 +111,12 @@ onMounted(() => {
                     <h1 class="mt-2 text-2xl font-semibold text-foreground">{{ title }}</h1>
                 </div>
                 <div class="flex flex-wrap gap-2">
+                    <Link
+                        class="rounded-full border border-border px-4 py-2 text-xs uppercase tracking-[0.3em] text-muted-foreground hover:text-foreground"
+                        :href="dashboardLink"
+                    >
+                        Dashboard
+                    </Link>
                     <Link
                         class="rounded-full border border-border px-4 py-2 text-xs uppercase tracking-[0.3em] text-muted-foreground hover:text-foreground"
                         :href="courseLink"
@@ -107,14 +145,14 @@ onMounted(() => {
             </div>
 
             <div v-else class="space-y-6">
-                <div class="relative overflow-hidden rounded-2xl border border-border bg-card p-6">
-                    <div v-if="isPerfect()" class="balloon-burst" aria-hidden="true">
-                        <span class="balloon balloon--one"></span>
-                        <span class="balloon balloon--two"></span>
-                        <span class="balloon balloon--three"></span>
-                        <span class="balloon balloon--four"></span>
-                        <span class="balloon balloon--five"></span>
-                    </div>
+                <div v-if="isPerfect()" class="balloon-burst" aria-hidden="true">
+                    <span class="balloon balloon--one"></span>
+                    <span class="balloon balloon--two"></span>
+                    <span class="balloon balloon--three"></span>
+                    <span class="balloon balloon--four"></span>
+                    <span class="balloon balloon--five"></span>
+                </div>
+                <div class="rounded-2xl border border-border bg-card p-6">
                     <div class="flex flex-wrap items-center justify-between gap-4">
                         <div>
                             <p class="text-xs uppercase tracking-[0.35em] text-muted-foreground">Score</p>
@@ -176,11 +214,11 @@ onMounted(() => {
 
 <style scoped>
 .balloon-burst {
-    position: absolute;
+    position: fixed;
     inset: 0;
     pointer-events: none;
     overflow: hidden;
-    z-index: 5;
+    z-index: 50;
 }
 
 .balloon {

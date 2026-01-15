@@ -23,6 +23,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'taken_courses',
     ];
 
     /**
@@ -48,13 +49,18 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'taken_courses' => 'array',
         ];
     }
 
     public function courses(): BelongsToMany
     {
         return $this->belongsToMany(Course::class)
-            ->withPivot('score')
+            ->withPivot('score', 'total_answers', 'correct_answers', 'final_score', 'completed_chapters', 'completed_topics')
+            ->withCasts([
+                'completed_chapters' => 'array',
+                'completed_topics' => 'array',
+            ])
             ->withTimestamps();
     }
 }

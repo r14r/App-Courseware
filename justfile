@@ -10,6 +10,10 @@ install:
     composer install
     npm install
 
+update:
+    composer update
+    npm update
+    
 build:
     npm run build
 

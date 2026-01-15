@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref } from 'vue';
 
+import type { AppPageProps } from '@/types';
 type TopicEntry = {
     file: string;
     title: string;
@@ -42,6 +43,7 @@ type Quiz = {
 
 const props = defineProps<{ slug: string }>();
 
+const page = usePage<AppPageProps>();
 const course = ref<Course | null>(null);
 const chapters = ref<Chapter[]>([]);
 const topics = ref<TopicEntry[]>([]);
@@ -57,6 +59,7 @@ const isLoading = ref(true);
 let prism: typeof import('prismjs') | null = null;
 
 const currentChapter = computed(() => chapters.value[selectedChapterIndex.value]);
+const currentTopic = computed(() => topics.value[selectedTopicIndex.value] ?? null);
 const quizLink = computed(() => {
     if (!currentChapter.value) {
         return '';
@@ -166,14 +169,7 @@ async function loadCourse(): Promise<void> {
 
         if (topicsIndex && Array.isArray(topicsIndex)) {
             const normalizedTopics = normalizeTopics(topicsIndex);
-            const quizEntry = normalizedTopics.find((topic) => topic.file.toLowerCase().endsWith('quiz.json'));
             chapterCopy.topics = normalizedTopics.filter((topic) => !topic.file.toLowerCase().endsWith('quiz.json'));
-            if (quizEntry) {
-                chapterCopy.topics.push({
-                    file: quizEntry.file,
-                    title: quizEntry.title || 'Quiz',
-                });
-            }
             console.log('Topics found:', {
                 chapter: chapterCopy.id,
                 topics: chapterCopy.topics,
@@ -206,14 +202,10 @@ async function loadChapter(index: number): Promise<void> {
 
     if (topicsIndex && Array.isArray(topicsIndex) && topicsIndex.length) {
         const normalizedTopics = normalizeTopics(topicsIndex);
-        const quizEntry = normalizedTopics.find((topic) => topic.file.toLowerCase().endsWith('quiz.json'));
         const filteredTopics = normalizedTopics.filter((topic) => !topic.file.toLowerCase().endsWith('quiz.json'));
 
-        chapter.topics = quizEntry
-            ? [...filteredTopics, { file: quizEntry.file, title: quizEntry.title || 'Quiz' }]
-            : filteredTopics;
-
-        topics.value = normalizedTopics;
+        chapter.topics = filteredTopics;
+        topics.value = filteredTopics;
         selectedTopicIndex.value = 0;
         showOnlyTopic.value = false;
         await loadTopic(selectedTopicIndex.value);
@@ -231,8 +223,10 @@ async function loadChapter(index: number): Promise<void> {
     if (!quiz) {
         quiz = await fetchJson<Quiz>(`/data/courses/${props.slug}/chapters/${chapter.id}/quiz.json`);
     }
-    quizAvailable.value = Boolean(quiz && quiz.questions);
-    quizTitle.value = quiz?.title || 'Quiz';
+    const rawQuiz = quiz as Quiz & { quiz?: Quiz };
+    const questions = quiz?.questions ?? rawQuiz.quiz?.questions ?? [];
+    quizAvailable.value = questions.length > 0;
+    quizTitle.value = quiz?.title || rawQuiz.quiz?.title || 'Quiz';
 }
 
 async function loadTopic(index: number): Promise<void> {
@@ -245,11 +239,6 @@ async function loadTopic(index: number): Promise<void> {
     const filename = topicEntry?.file;
 
     if (!filename) {
-        return;
-    }
-
-    if (filename.toLowerCase().endsWith('quiz.json')) {
-        goToQuiz();
         return;
     }
 
@@ -273,13 +262,48 @@ async function loadTopic(index: number): Promise<void> {
     await updateContent('<p>No content.</p>', chapter.title || '', false);
 }
 
-function nextChapter(): void {
-    if (topics.value.length && selectedTopicIndex.value < topics.value.length - 1) {
-        loadTopic(selectedTopicIndex.value + 1);
+async function storeChapterCompletion(chapter: Chapter): Promise<void> {
+    if (!page.props.auth?.user) {
         return;
     }
+
+    const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+    if (!token) {
+        return;
+    }
+
+    const topicKeys = topics.value
+        .map((topic) => topic.file)
+        .filter((file): file is string => Boolean(file))
+        .map((file) => `${chapter.id}/${file}`);
+
+    await fetch('/progress/completion', {
+        method: 'post',
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': token,
+        },
+        body: JSON.stringify({
+            slug: props.slug,
+            chapter_id: chapter.id,
+            topics: topicKeys,
+        }),
+    });
+}
+
+async function nextChapter(): Promise<void> {
+    if (topics.value.length && selectedTopicIndex.value < topics.value.length - 1) {
+        await loadTopic(selectedTopicIndex.value + 1);
+        return;
+    }
+
+    if (topics.value.length && selectedTopicIndex.value === topics.value.length - 1 && currentChapter.value) {
+        await storeChapterCompletion(currentChapter.value);
+    }
+
     if (selectedChapterIndex.value < chapters.value.length - 1) {
-        loadChapter(selectedChapterIndex.value + 1);
+        await loadChapter(selectedChapterIndex.value + 1);
     }
 }
 
@@ -336,6 +360,10 @@ onMounted(async () => {
                         </p>
                     </div>
                 </div>
+                <nav class="flex items-center gap-4 text-xs uppercase tracking-[0.35em] text-muted-foreground">
+                    <Link href="/" class="transition hover:text-foreground">Courses</Link>
+                    <Link href="/dashboard" class="transition hover:text-foreground">Dashboard</Link>
+                </nav>
             </div>
         </header>
 
@@ -363,15 +391,24 @@ onMounted(async () => {
                                     <li v-for="(topic, topicIndex) in chapter.topics" :key="topic.file || topic.title">
                                         <button
                                             type="button"
-                                            class="w-full rounded-full px-3 py-1 text-left text-muted-foreground transition hover:text-foreground"
-                                            :class="
-                                                selectedChapterIndex === index && selectedTopicIndex === topicIndex
-                                                    ? 'bg-muted text-foreground'
-                                                    : 'text-muted-foreground'
-                                            "
+                                            class="menu-topic-item"
+                                            :class="{
+                                                selected:
+                                                    selectedChapterIndex === index && currentTopic?.file === topic.file,
+                                            }"
                                             @click="loadChapter(index).then(() => loadTopic(topicIndex))"
                                         >
                                             {{ topic.title }}
+                                        </button>
+                                    </li>
+                                    <li key="quiz">
+                                        <button
+                                            type="button"
+                                            class="w-full rounded-full px-3 py-1 text-left text-muted-foreground transition hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                            :disabled="!quizAvailable"
+                                            @click="goToQuiz"
+                                        >
+                                            Quiz
                                         </button>
                                     </li>
                                 </ul>
@@ -420,14 +457,6 @@ onMounted(async () => {
                                     Next
                                 </button>
                             </div>
-                            <button
-                                v-if="quizAvailable"
-                                type="button"
-                                class="rounded-full bg-foreground px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-background"
-                                @click="goToQuiz"
-                            >
-                                {{ quizTitle }}
-                            </button>
                         </div>
                     </div>
                 </section>

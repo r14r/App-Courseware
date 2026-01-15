@@ -70,3 +70,13 @@
     --sidebar-ring: hsl(217.2 91.2% 59.8%);
     --sidebar: hsl(240 5.9% 10%);
 }
+
+@layer components {
+    .menu-topic-item {
+        @apply w-full border-b-2 border-transparent px-3 py-1 text-left text-muted-foreground transition hover:border-primary/60 hover:text-foreground;
+    }
+
+    .menu-topic-item.selected {
+        @apply border-primary border-b-2 text-foreground;
+    }
+}

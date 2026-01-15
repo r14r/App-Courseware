@@ -35,7 +35,11 @@ class Course extends Model
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class)
-            ->withPivot('score')
+            ->withPivot('score', 'total_answers', 'correct_answers', 'final_score', 'completed_chapters', 'completed_topics')
+            ->withCasts([
+                'completed_chapters' => 'array',
+                'completed_topics' => 'array',
+            ])
             ->withTimestamps();
     }
 }

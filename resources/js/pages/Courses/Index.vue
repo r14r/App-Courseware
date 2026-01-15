@@ -102,7 +102,15 @@ onMounted(() => {
                 <Link href="/" class="text-sm font-semibold uppercase tracking-[0.35em] text-foreground">
                     Courseware
                 </Link>
-                <span class="text-xs uppercase tracking-[0.35em] text-muted-foreground">Library</span>
+                <div class="flex items-center gap-6">
+                    <nav class="flex items-center gap-4 text-xs uppercase tracking-[0.35em] text-muted-foreground">
+                        <Link href="/" class="transition hover:text-foreground">Courses</Link>
+                        <Link href="/dashboard" class="transition hover:text-foreground">Dashboard</Link>
+                    </nav>
+                    <!--
+                    <span class="text-xs uppercase tracking-[0.35em] text-muted-foreground">Library</span>
+                    -->
+                </div>
             </div>
         </header>
 

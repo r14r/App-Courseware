@@ -103,6 +103,21 @@ it('prefers json files over yaml files', function () {
     ]);
 });
 
+it('returns markdown content when available', function () {
+    Storage::fake('local');
+
+    Storage::disk('local')->put('courses/demo/topic.md', "# Demo\n\nHello **world**");
+    Storage::disk('local')->put('courses/demo/topic.json', json_encode(['title' => 'Json'], JSON_THROW_ON_ERROR));
+
+    $response = $this->get('/data/courses/demo/topic.json');
+
+    $response->assertSuccessful();
+    $payload = $response->json();
+
+    expect($payload['title'])->toBe('Demo')
+        ->and($payload['contentHtml'])->toContain('Hello <strong>world</strong>');
+});
+
 it('rejects unsafe data paths', function () {
     Storage::fake('local');
 

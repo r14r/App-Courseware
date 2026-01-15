@@ -11,7 +11,12 @@ type CourseSummary = {
     title: string;
     description: string | null;
     score: number | null;
+    total_answers: number | null;
+    correct_answers: number | null;
+    final_score: number | null;
     chapters: number;
+    completed_chapters: number;
+    completed_topics: number;
 };
 
 defineProps<{
@@ -65,7 +70,29 @@ const breadcrumbs: BreadcrumbItem[] = [
                     </div>
                     <div class="mt-4 flex items-center justify-between text-sm text-muted-foreground">
                         <span>Score</span>
-                        <span class="font-semibold text-foreground">{{ course.score ?? '—' }}</span>
+                        <span class="font-semibold text-foreground">
+                            <template v-if="course.total_answers !== null && course.correct_answers !== null">
+                                {{ course.correct_answers }} / {{ course.total_answers }}
+                            </template>
+                            <template v-else>
+                                {{ course.score ?? '—' }}
+                            </template>
+                        </span>
+                    </div>
+                    <div class="mt-2 flex items-center justify-between text-sm text-muted-foreground">
+                        <span>Final Score</span>
+                        <span class="font-semibold text-foreground">
+                            <template v-if="course.final_score !== null">{{ course.final_score }}%</template>
+                            <template v-else>—</template>
+                        </span>
+                    </div>
+                    <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <span class="rounded-full bg-muted px-3 py-1 uppercase tracking-[0.3em] text-muted-foreground">
+                            {{ course.completed_chapters }} / {{ course.chapters }} chapters
+                        </span>
+                        <span class="rounded-full bg-muted px-3 py-1 uppercase tracking-[0.3em] text-muted-foreground">
+                            {{ course.completed_topics }} topics done
+                        </span>
                     </div>
                     <div class="mt-4">
                         <Link

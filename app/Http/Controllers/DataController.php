@@ -8,6 +8,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use JsonException;
+use League\CommonMark\CommonMarkConverter;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
@@ -39,8 +40,8 @@ class DataController extends Controller
         ]);
 
         return response()->json([
-            'count' => count($files),            
-            'files' => $files,            
+            'count' => count($files),
+            'files' => $files,
         ]);
     }
 
@@ -51,6 +52,14 @@ class DataController extends Controller
         if ($this->isCourseIndex($storagePath)) {
             $payload = $this->listCourseSlugs();
             $this->logCoursewareDetails($storagePath, $payload);
+
+            return response()->json($payload);
+        }
+
+        $markdownPath = $this->resolveMarkdownPath($storagePath);
+        if ($markdownPath && Storage::disk('local')->exists($markdownPath)) {
+            $payload = $this->markdownPayload($markdownPath);
+            $this->logCoursewareDetails($markdownPath, $payload);
 
             return response()->json($payload);
         }
@@ -307,6 +316,15 @@ class DataController extends Controller
         return $storagePath;
     }
 
+    private function resolveMarkdownPath(string $storagePath): ?string
+    {
+        if ($this->isJsonPath($storagePath)) {
+            return substr($storagePath, 0, -strlen(self::JSON_EXTENSION)).'.md';
+        }
+
+        return null;
+    }
+
     private function resolveWritePath(string $storagePath): string
     {
         if ($this->isYamlPath($storagePath)) {
@@ -331,6 +349,53 @@ class DataController extends Controller
         } catch (JsonException) {
             return null;
         }
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function markdownPayload(string $path): array
+    {
+        $contents = Storage::disk('local')->get($path);
+        [$title, $body] = $this->splitMarkdown($contents);
+        $converter = new CommonMarkConverter;
+        $html = trim($converter->convert($body)->getContent());
+
+        return array_filter([
+            'title' => $title,
+            'contentHtml' => $html,
+        ], static fn (string $value): bool => $value !== '');
+    }
+
+    /**
+     * @return array{0: string|null, 1: string}
+     */
+    private function splitMarkdown(string $contents): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $contents) ?: [];
+        $title = null;
+        $bodyLines = [];
+        $seenContent = false;
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+
+            if (! $seenContent && $trimmed === '') {
+                continue;
+            }
+
+            if (! $seenContent && str_starts_with($trimmed, '# ')) {
+                $title = trim(substr($trimmed, 2));
+                $seenContent = true;
+
+                continue;
+            }
+
+            $seenContent = true;
+            $bodyLines[] = $line;
+        }
+
+        return [$title, implode("\n", $bodyLines)];
     }
 
     private function isCourseIndex(string $storagePath): bool
@@ -367,10 +432,10 @@ class DataController extends Controller
 
         $result = array_map(static fn (string $slug): array => ['slug' => $slug], $slugs);
 
-        $this->logDebug("listCourseSlugs ", [
-            "directories" => $directories,
-            "slugs" => $slugs,
-            "result" => $result
+        $this->logDebug('listCourseSlugs ', [
+            'directories' => $directories,
+            'slugs' => $slugs,
+            'result' => $result,
         ]);
 
         return $result;
